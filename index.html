@@ -1,0 +1,1281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.4 system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Tempo Clock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@300;500;700&family=Instrument+Sans:wght@400;500;600;700&family=Bungee&family=Press+Start+2P&display=swap">
+<style>
+:root{
+  --bg:#E9ECEF; --panel:#F6F7F8; --raised:#FFFFFF; --ink:#16202A; --muted:#5B6773; --line:#CFD5DB;
+  --face:#FBFBFA; --face-ink:#16202A; --accent:#E8590C; --on-accent:#FFFFFF; --good:#2F855A; --warn:#B7791F;
+  --shadow:0 1px 0 rgba(22,32,42,.04),0 8px 24px -12px rgba(22,32,42,.18);
+  --mono:"Azeret Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0F151B; --panel:#161E26; --raised:#1D2731; --ink:#E6EBF0; --muted:#8C99A6; --line:#2A3642;
+    --face:#121A21; --face-ink:#E6EBF0; --shadow:0 1px 0 rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.7);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0F151B; --panel:#161E26; --raised:#1D2731; --ink:#E6EBF0; --muted:#8C99A6; --line:#2A3642;
+  --face:#121A21; --face-ink:#E6EBF0; --shadow:0 1px 0 rgba(0,0,0,.3),0 10px 30px -14px rgba(0,0,0,.7);
+}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.45;padding-inline:16px;padding-block:20px 40px}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand h1{font-family:var(--mono);font-weight:700;font-size:22px;letter-spacing:-.02em;margin:0}
+.brand span{color:var(--muted);font-size:13px}
+.tabs{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px;gap:2px}
+.tabs button{border:0;background:transparent;color:var(--muted);font:600 14px var(--sans);padding:8px 16px;border-radius:999px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:24px;display:flex;flex-direction:column;align-items:center;gap:20px;min-height:520px;justify-content:center;position:relative;overflow:hidden}
+.stage.ringing::after{content:"";position:absolute;inset:0;background:var(--accent);opacity:0;animation:flash 1s steps(2) infinite;pointer-events:none}
+@keyframes flash{50%{opacity:.18}}
+@media (prefers-reduced-motion:reduce){.stage.ringing::after{animation:none;opacity:.12}}
+aside{display:flex;flex-direction:column;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.card h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 12px;font-weight:600}
+.view[hidden]{display:none!important}
+
+/* Clock */
+.clock-wrap{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%}
+#analog{width:min(360px,100%);aspect-ratio:1;max-width:100%}
+.digital{font-family:var(--mono);font-weight:300;font-size:clamp(44px,9vw,84px);letter-spacing:-.04em;font-variant-numeric:tabular-nums;line-height:1;display:flex;align-items:baseline;gap:8px}
+.digital .sec{color:var(--accent);font-weight:500}
+.digital .ampm{font-size:.28em;color:var(--muted);font-weight:500;letter-spacing:.04em}
+.dateline{color:var(--muted);font-size:14px;letter-spacing:.02em}
+.tzline{font-family:var(--mono);font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+
+/* Timer */
+.ring-box{position:relative;width:min(380px,100%);aspect-ratio:1;max-width:100%}
+.ring-box svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring-track{fill:none;stroke:var(--line);stroke-width:10}
+.ring-fill{fill:none;stroke:var(--accent);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .15s linear}
+.ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:0 12%}
+.t-label{font-size:14px;color:var(--muted);font-weight:500;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t-read{font-family:var(--mono);font-weight:300;font-size:clamp(42px,9vw,76px);letter-spacing:-.04em;font-variant-numeric:tabular-nums;line-height:1}
+.t-sub{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.controls{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.btn{border:1px solid var(--line);background:var(--raised);color:var(--ink);font:600 14px var(--sans);padding:10px 18px;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);min-width:120px;justify-content:center}
+.btn.small{padding:6px 10px;font-size:13px;border-radius:8px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dismiss{position:relative;z-index:2}
+
+.presets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.preset{position:relative;border:1px solid var(--line);background:var(--raised);border-radius:10px;padding:10px 8px;cursor:pointer;text-align:center;color:var(--ink);font-family:var(--sans)}
+.preset:hover{border-color:var(--accent)}
+.preset.active{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.preset b{display:block;font-family:var(--mono);font-weight:500;font-size:17px;font-variant-numeric:tabular-nums}
+.preset small{display:block;font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.preset .x{position:absolute;top:2px;right:4px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:2px}
+.preset .x:hover{color:var(--accent)}
+
+.custom{display:flex;flex-direction:column;gap:10px}
+.hms{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.hms label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+input[type=number],input[type=text],select{width:100%;border:1px solid var(--line);background:var(--raised);color:var(--ink);border-radius:8px;padding:8px 10px;font:500 15px var(--sans)}
+input[type=number]{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row > *{flex:1 1 auto}
+.adj{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+
+/* Stopwatch */
+.sw-read{font-family:var(--mono);font-weight:300;font-size:clamp(44px,10vw,92px);letter-spacing:-.04em;font-variant-numeric:tabular-nums;line-height:1}
+.sw-read .cs{color:var(--accent);font-size:.55em;font-weight:500}
+.laps{width:100%;max-width:460px;max-height:240px;overflow:auto;border-top:1px solid var(--line)}
+.laps table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:14px;font-variant-numeric:tabular-nums}
+.laps td,.laps th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right}
+.laps th{font:600 11px var(--sans);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.laps td:first-child,.laps th:first-child{text-align:left}
+.laps tr.fast td{color:var(--good)}
+.laps tr.slow td{color:var(--warn)}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:14px}
+
+/* Settings */
+.set{display:flex;flex-direction:column;gap:12px}
+.field{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:14px}
+.field > span{color:var(--ink)}
+.field select{width:auto;min-width:140px;padding:6px 8px;font-size:14px}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--raised);color:var(--muted);font:600 12px var(--sans);padding:6px 10px;cursor:pointer}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.switch{position:relative;width:40px;height:22px;flex:none}
+.switch input{opacity:0;width:100%;height:100%;margin:0;position:absolute;inset:0;cursor:pointer;z-index:1}
+.switch i{position:absolute;inset:0;background:var(--line);border-radius:999px;transition:background .15s}
+.switch i::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--raised);transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.switch input:checked + i{background:var(--accent)}
+.switch input:checked + i::after{transform:translateX(18px)}
+.switch input:focus-visible + i{outline:2px solid var(--accent);outline-offset:2px}
+.swatches{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.sw{width:24px;height:24px;border-radius:50%;border:2px solid var(--panel);box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 2px var(--ink)}
+input[type=color]{width:28px;height:28px;border:1px solid var(--line);border-radius:50%;padding:0;background:none;cursor:pointer}
+input[type=range]{accent-color:var(--accent);width:140px}
+.divider{height:1px;background:var(--line);margin:2px 0}
+.hint{font-size:12px;color:var(--muted)}
+/* Trivia */
+.trivia{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:22px;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:24px}
+@media (max-width:860px){.trivia{grid-template-columns:minmax(0,1fr)}}
+.trivia h2{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 4px;font-weight:600}
+.ticker{width:100%;max-width:560px;min-height:5.2em;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:12px 16px;border-radius:12px;background:var(--raised);border:1px solid var(--line);transition:opacity .22s ease,transform .22s ease}
+.ticker.out{opacity:0;transform:translateY(6px)}
+.ticker .ft{font-size:16px;font-weight:500;text-wrap:balance}
+.ticker .fs{font-size:11px;color:var(--muted)}
+.ticker .fk{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.hist{width:100%;max-width:560px;border-left:3px solid var(--accent);padding:10px 14px;background:var(--raised);border-radius:0 12px 12px 0;display:flex;flex-direction:column;gap:3px}
+.hist .hy{font-family:var(--mono);font-weight:500;font-size:13px;color:var(--accent);letter-spacing:.04em}
+.hist p{margin:0;font-size:15px}
+@media (prefers-reduced-motion:reduce){.ticker{transition:none}.ticker.out{opacity:1;transform:none}}
+.loghead{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.log{display:flex;flex-direction:column;gap:6px;max-height:460px;overflow:auto;padding-right:4px}
+.log details{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.log summary{cursor:pointer;display:flex;gap:10px;align-items:baseline;font-size:14px;list-style:none}
+.log summary::-webkit-details-marker{display:none}
+.log .tag{font-family:var(--mono);font-size:12px;color:var(--accent);flex:none;min-width:5.5em;font-variant-numeric:tabular-nums}
+.log details p{margin:8px 0 2px;font-size:14px;color:var(--ink)}
+.log details small{font-size:11px;color:var(--muted)}
+.log .tag em{display:block;font-style:normal;font-family:var(--sans);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.trivia:has(#numbox[hidden]){grid-template-columns:minmax(0,1fr)}
+.log details[open]{border-color:var(--accent)}
+.trivia h3{font-family:var(--mono);font-weight:500;font-size:22px;letter-spacing:-.02em;margin:0 0 14px;text-wrap:balance}
+.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (max-width:520px){.facts{grid-template-columns:minmax(0,1fr)}}
+.fact{background:var(--raised);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:3px}
+.fact b{font-family:var(--mono);font-weight:500;font-size:20px;letter-spacing:-.02em;color:var(--accent);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.fact p{margin:0;font-size:14px}
+.fact small,.src{font-size:11px;color:var(--muted)}
+.numbox{display:flex;flex-direction:column;gap:12px}
+.bignum{font-family:var(--mono);font-weight:300;font-size:64px;line-height:1;letter-spacing:-.05em;color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12px;font-weight:600;border:1px solid var(--line);background:var(--raised);border-radius:999px;padding:4px 10px}
+.note{font-size:14px;margin:0}
+.dyk{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.dyk p{margin:0;font-size:14px}
+
+/* F1 */
+.lights{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.pod{background:#11161B;border-radius:12px;padding:10px 8px;display:flex;flex-direction:column;gap:8px}
+.pod i{width:clamp(34px,7vw,52px);aspect-ratio:1;border-radius:50%;background:#2A1416;display:block;box-shadow:inset 0 -3px 6px rgba(0,0,0,.5)}
+.pod.on i.red{background:#FF2A1F;box-shadow:0 0 18px 4px rgba(255,42,31,.55),inset 0 -3px 6px rgba(0,0,0,.25)}
+.react{font-family:var(--mono);font-weight:300;font-size:clamp(40px,9vw,72px);letter-spacing:-.04em;font-variant-numeric:tabular-nums;line-height:1;text-align:center}
+.react-msg{color:var(--muted);text-align:center;font-size:14px;min-height:1.5em;max-width:46ch}
+.hit{width:100%;max-width:520px;border:2px dashed var(--line);border-radius:14px;padding:22px 16px;background:transparent;color:var(--ink);font:600 16px var(--sans);cursor:pointer}
+.hit:hover{border-color:var(--accent)}
+.records{display:flex;flex-direction:column;gap:8px}
+.rec{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center}
+.rec b{font-family:var(--mono);font-weight:500;font-size:17px;font-variant-numeric:tabular-nums}
+.rec span{font-size:13px}
+.rec small{grid-column:1/-1;font-size:11px;color:var(--muted)}
+.rec .btn{grid-row:1/3;grid-column:2}
+/* Chaos */
+.stage.chaos-live{transition:background-color .6s ease,color .6s ease,filter .35s ease,transform .5s ease}
+.c-title{font-family:var(--mono);font-size:12px;letter-spacing:.2em;text-transform:uppercase;opacity:.7}
+.c-time{font-size:clamp(46px,11vw,104px);font-weight:500;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;text-align:center;transition:letter-spacing .4s}
+.c-date{font-size:15px;opacity:.75;text-align:center}
+.c-rate{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;border:1px solid currentColor;border-radius:999px;opacity:.8}
+.c-fact{max-width:520px;text-align:center;font-size:16px;min-height:3em;transition:opacity .3s}
+.c-fact small{display:block;font-size:11px;opacity:.6;margin-top:4px}
+#cAnalog{width:min(170px,50%);aspect-ratio:1;max-width:100%}
+.c-banner{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;pointer-events:none;text-align:center;z-index:3;padding:16px}
+.c-banner b{font-family:"Bungee",Impact,sans-serif;font-size:clamp(30px,7vw,64px);line-height:1;color:#FFD400;-webkit-text-stroke:2px #1a0b2e;text-shadow:4px 4px 0 #7B2CBF;animation:bannerIn .45s cubic-bezier(.2,1.6,.4,1)}
+.c-banner span{font-size:clamp(16px,3vw,24px);font-weight:700;color:#fff;background:#1a0b2e;padding:4px 12px;border-radius:6px}
+.c-banner small{font-size:12px;color:#fff;background:rgba(26,11,46,.8);padding:2px 8px;border-radius:4px}
+@keyframes bannerIn{from{transform:scale(2.2) rotate(-8deg);opacity:0}to{transform:none;opacity:1}}
+.stage.zawarudo::before{content:"";position:absolute;left:50%;top:50%;width:40px;height:40px;margin:-20px 0 0 -20px;border-radius:50%;border:6px solid #FFD400;box-shadow:0 0 40px #7B2CBF;animation:pulse 1.1s ease-out forwards;pointer-events:none;z-index:2}
+@keyframes pulse{to{transform:scale(40);opacity:0}}
+.menace{position:absolute;font-family:"Bungee",Impact,sans-serif;font-size:clamp(28px,5vw,48px);color:#9D4EDD;-webkit-text-stroke:1px #1a0b2e;pointer-events:none;z-index:2;animation:menace 3s ease-in-out forwards}
+@keyframes menace{0%{opacity:0;transform:translateY(10px) scale(.8)}20%{opacity:1}100%{opacity:0;transform:translateY(-40px) scale(1.1) rotate(-6deg)}}
+.stage.shake{animation:shake .5s linear 3}
+@keyframes shake{25%{translate:-6px 2px}50%{translate:5px -3px}75%{translate:-3px -2px}}
+.summons{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:620px}
+.summons .btn{font-size:12px;padding:7px 10px}
+.feed{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow:auto}
+.feed div{font-size:13px;background:var(--raised);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+.feed div b{font-family:var(--mono);font-size:11px;color:var(--accent);margin-right:6px}
+@media (prefers-reduced-motion:reduce){.stage.zawarudo::before,.stage.shake,.menace,.c-banner b{animation:none}}
+kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line);border-radius:4px;padding:1px 5px;background:var(--raised)}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><h1>Tempo</h1><span>clock · timer · stopwatch</span></div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-clock" data-view="clock" aria-selected="false">Clock</button>
+      <button role="tab" id="tab-timer" data-view="timer" aria-selected="true">Timer</button>
+      <button role="tab" id="tab-stopwatch" data-view="stopwatch" aria-selected="false">Stopwatch</button>
+      <button role="tab" id="tab-f1" data-view="f1" aria-selected="false">F1</button>
+      <button role="tab" id="tab-chaos" data-view="chaos" aria-selected="false">Chaos</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <main class="stage" id="stage">
+      <!-- CLOCK -->
+      <section class="view clock-wrap" id="view-clock" hidden>
+        <svg id="analog" viewBox="0 0 200 200" aria-label="Analog clock">
+          <circle cx="100" cy="100" r="96" fill="var(--face)" stroke="var(--line)" stroke-width="1.5"/>
+          <g id="marks"></g>
+          <line id="hHand" x1="100" y1="100" x2="100" y2="54" stroke="var(--face-ink)" stroke-width="5" stroke-linecap="round"/>
+          <line id="mHand" x1="100" y1="100" x2="100" y2="30" stroke="var(--face-ink)" stroke-width="3" stroke-linecap="round"/>
+          <g id="sHandG"><line x1="100" y1="116" x2="100" y2="22" stroke="var(--accent)" stroke-width="1.4" stroke-linecap="round"/><circle cx="100" cy="100" r="3.5" fill="var(--accent)"/></g>
+          <circle cx="100" cy="100" r="1.4" fill="var(--face)"/>
+        </svg>
+        <div class="digital" id="digital"></div>
+        <div class="dateline" id="dateline"></div>
+        <div class="tzline" id="tzline"></div>
+        <div class="hist" id="hist"><span class="hy" id="histYear"></span><p id="histText"></p></div>
+        <div class="ticker" id="cFact" aria-live="polite"><span class="fk">Right now</span><span class="ft"></span></div>
+      </section>
+
+      <!-- TIMER -->
+      <section class="view" id="view-timer" style="display:flex;flex-direction:column;align-items:center;gap:20px;width:100%">
+        <div class="ring-box">
+          <svg viewBox="0 0 200 200" aria-hidden="true">
+            <circle class="ring-track" cx="100" cy="100" r="88"/>
+            <circle class="ring-fill" id="ringFill" cx="100" cy="100" r="88"/>
+          </svg>
+          <div class="ring-center">
+            <div class="t-label" id="tLabel">5 minutes</div>
+            <div class="t-read" id="tRead">05:00</div>
+            <div class="t-sub" id="tSub">Ready</div>
+          </div>
+        </div>
+        <div class="adj">
+          <button class="btn small" data-adj="-60">−1 min</button>
+          <button class="btn small" data-adj="-10">−10 s</button>
+          <button class="btn small" data-adj="10">+10 s</button>
+          <button class="btn small" data-adj="60">+1 min</button>
+          <button class="btn small" data-adj="300">+5 min</button>
+        </div>
+        <div class="controls">
+          <button class="btn primary" id="tStart">Start</button>
+          <button class="btn" id="tReset">Reset</button>
+          <button class="btn dismiss" id="tDismiss" hidden>Stop alarm</button>
+        </div>
+        <div class="ticker" id="tFact" aria-live="polite"><span class="fk">Fun facts</span><span class="ft">Start the timer and a new fact appears every second, matched to the time left.</span></div>
+        <div class="hint"><kbd>Space</kbd> start / pause · <kbd>R</kbd> reset</div>
+      </section>
+
+      <!-- STOPWATCH -->
+      <section class="view" id="view-stopwatch" hidden style="flex-direction:column;align-items:center;gap:22px;width:100%">
+        <div class="sw-read" id="swRead">00:00<span class="cs">.00</span></div>
+        <div class="controls">
+          <button class="btn primary" id="swStart">Start</button>
+          <button class="btn" id="swLap" disabled>Lap</button>
+          <button class="btn" id="swReset">Reset</button>
+        </div>
+        <div class="laps" id="laps"><div class="empty">Laps appear here. Press <kbd>L</kbd> or Lap while running.</div></div>
+        <div class="hint"><kbd>Space</kbd> start / stop · <kbd>L</kbd> lap · <kbd>R</kbd> reset</div>
+      </section>
+
+      <!-- F1 LIGHTS OUT -->
+      <section class="view" id="view-f1" hidden style="flex-direction:column;align-items:center;gap:20px;width:100%">
+        <div style="text-align:center"><h2 style="margin:0;font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)">Lights out reaction test</h2></div>
+        <div class="lights" id="lights"></div>
+        <div class="react" id="reactRead">0.000</div>
+        <div class="react-msg" id="reactMsg">Five red lights come on one by one. When they all go out, react as fast as you can.</div>
+        <button class="hit" id="hit">Tap here or press Space to start</button>
+        <div class="hint" id="reactBest"></div>
+      </section>
+      <!-- CHAOS -->
+      <section class="view" id="view-chaos" hidden style="flex-direction:column;align-items:center;gap:14px;width:100%">
+        <div class="c-title" id="cTitle">Chaos mode</div>
+        <svg id="cAnalog" viewBox="0 0 200 200" aria-hidden="true">
+          <circle cx="100" cy="100" r="94" fill="none" stroke="currentColor" stroke-width="3" opacity=".5"/>
+          <line id="caH" x1="100" y1="100" x2="100" y2="55" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
+          <line id="caM" x1="100" y1="100" x2="100" y2="28" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+          <line id="caS" x1="100" y1="112" x2="100" y2="20" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <div class="c-time" id="cTime">00:00:00</div>
+        <div class="c-date" id="cDate"></div>
+        <div class="c-rate" id="cRate">Speed ×1.0</div>
+        <div class="c-fact" id="cFact2">Press Start chaos. Time will stop behaving.</div>
+        <div class="controls">
+          <button class="btn primary" id="cGo">Start chaos</button>
+          <button class="btn" id="cReset">Reset reality</button>
+        </div>
+        <div class="summons" aria-label="Summon a Stand">
+          <button class="btn" data-ev="theworld">The World (time stop)</button>
+          <button class="btn" data-ev="starplat">Star Platinum: The World</button>
+          <button class="btn" data-ev="bites">Bites the Dust (rewind)</button>
+          <button class="btn" data-ev="kingcrimson">King Crimson (skip)</button>
+          <button class="btn" data-ev="heaven">Made in Heaven (accelerate)</button>
+        </div>
+        <div class="c-banner" id="cBanner" hidden></div>
+      </section>
+
+    </main>
+
+    <aside>
+      <!-- Timer side -->
+      <div class="card" id="side-timer">
+        <h2>Common timers</h2>
+        <div class="presets" id="presets"></div>
+      </div>
+      <div class="card" id="side-custom">
+        <h2>Custom timer</h2>
+        <form class="custom" id="customForm">
+          <div class="hms">
+            <label for="cH">Hours<input type="number" id="cH" min="0" max="99" value="0"></label>
+            <label for="cM">Minutes<input type="number" id="cM" min="0" max="59" value="7"></label>
+            <label for="cS">Seconds<input type="number" id="cS" min="0" max="59" value="30"></label>
+          </div>
+          <input type="text" id="cLabel" placeholder="Label (optional), e.g. Laundry" maxlength="40">
+          <div class="row">
+            <button class="btn primary" type="submit">Set timer</button>
+            <button class="btn" type="button" id="savePreset">Save as preset</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card" id="side-f1" hidden>
+        <h2>F1 time records</h2>
+        <div class="records" id="records"></div>
+        <p class="src" style="margin:10px 0 0">Records as of the end of the 2025 season. Sources: Formula1.com, FIA results, DHL Fastest Pit Stop Award.</p>
+      </div>
+
+      <div class="card" id="side-chaos" hidden>
+        <h2>Chaos controls</h2>
+        <div class="set">
+          <div class="field"><span>Intensity</span><input type="range" id="cInt" min="0.4" max="3" step="0.1" value="1.2"></div>
+          <div class="field"><span>Chaos sounds</span><label class="switch"><input type="checkbox" id="cSnd" checked><i></i></label></div>
+          <div class="field"><span>Screen flips &amp; shakes</span><label class="switch"><input type="checkbox" id="cMove" checked><i></i></label></div>
+        </div>
+      </div>
+      <div class="card" id="side-chaos2" hidden>
+        <h2>What just happened</h2>
+        <div class="feed" id="cFeed"><div>Nothing yet. Reality is stable… for now.</div></div>
+      </div>
+
+      <!-- Settings -->
+      <div class="card">
+        <h2>Customize</h2>
+        <div class="set">
+          <div class="field"><span>Accent</span>
+            <div class="swatches" id="swatches"><input type="color" id="accentPick" aria-label="Custom accent color"></div>
+          </div>
+          <div class="field"><span>Theme</span>
+            <div class="seg" id="themeSeg"><button data-v="system">Auto</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div>
+          </div>
+          <div class="divider"></div>
+          <div class="field"><span>Clock face</span>
+            <div class="seg" id="styleSeg"><button data-v="analog">Analog</button><button data-v="digital">Digital</button><button data-v="both">Both</button></div>
+          </div>
+          <div class="field"><span>Dial markings</span>
+            <div class="seg" id="marksSeg"><button data-v="numerals">12·3·6</button><button data-v="ticks">Ticks</button><button data-v="minimal">Minimal</button></div>
+          </div>
+          <div class="field"><span>24-hour time</span><label class="switch"><input type="checkbox" id="h24"><i></i></label></div>
+          <div class="field"><span>Show seconds</span><label class="switch"><input type="checkbox" id="secs"><i></i></label></div>
+          <div class="field"><span>Smooth second hand</span><label class="switch"><input type="checkbox" id="sweep"><i></i></label></div>
+          <div class="field"><span>Show date</span><label class="switch"><input type="checkbox" id="showDate"><i></i></label></div>
+          <div class="field"><span>Time zone</span><select id="tz"></select></div>
+          <div class="divider"></div>
+          <div class="field"><span>Alarm sound</span>
+            <select id="tone"><option value="chime">Chime</option><option value="bell">Bell</option><option value="beep">Beep</option><option value="digital">Digital</option><option value="none">Silent</option></select>
+          </div>
+          <div class="field"><span>Volume</span><input type="range" id="vol" min="0" max="1" step="0.05"></div>
+          <div class="field"><span>Ring</span>
+            <select id="repeats"><option value="1">Once</option><option value="3">3 times</option><option value="6">6 times</option><option value="0">Until stopped</option></select>
+          </div>
+          <div class="field"><span>Tick in last 10 s</span><label class="switch"><input type="checkbox" id="lastTicks"><i></i></label></div>
+          <div class="field"><span>Flash when done</span><label class="switch"><input type="checkbox" id="flash"><i></i></label></div>
+          <div class="field"><span>Repeat timer (loop)</span><label class="switch"><input type="checkbox" id="loop"><i></i></label></div>
+          <button class="btn small" id="testSound" type="button">Test sound</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <section class="trivia" id="trivia" aria-live="polite">
+    <div>
+      <div class="loghead"><div><h2>Fact log</h2><h3 id="logCount" style="margin:0">No facts yet</h3></div><button class="btn small" id="logClear" type="button">Clear log</button></div>
+      <div class="log" id="log"><div class="empty">Every fact that appears is saved here. Tap one to read more.</div></div>
+    </div>
+    <div class="numbox" id="numbox">
+      <h2>About the number</h2>
+      <div class="bignum" id="bignum">5</div>
+      <div class="chips" id="chips"></div>
+      <p class="note" id="numNote"></p>
+      <div class="dyk">
+        <h2>Did you know</h2>
+        <p id="dykText"></p>
+        <div class="src" id="dykSrc"></div>
+        <div><button class="btn small" id="dykNext" type="button">Another fact</button></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const store = {
+  get(k, d){ try { const v = localStorage.getItem('tempo:'+k); return v ? JSON.parse(v) : d; } catch(e){ return d; } },
+  set(k, v){ try { localStorage.setItem('tempo:'+k, JSON.stringify(v)); } catch(e){} }
+};
+
+/* ---------- settings ---------- */
+const DEFAULTS = {accent:'#E8590C', theme:'system', clockStyle:'both', marks:'numerals', h24:false, secs:true, sweep:true, showDate:true,
+  tz:'local', tone:'chime', vol:0.6, repeats:3, lastTicks:true, flash:true, loop:false};
+const S = Object.assign({}, DEFAULTS, store.get('settings', {}));
+const save = () => store.set('settings', S);
+
+const SWATCHES = ['#E8590C','#D6336C','#7048E8','#1C7ED6','#0C8599','#2B8A3E','#16202A'];
+const DEFAULT_PRESETS = [
+  {s:30,note:'Quick'},{s:60,note:''},{s:120,note:''},{s:180,note:''},{s:300,note:'Short break'},{s:600,note:''},
+  {s:900,note:'Long break'},{s:1200,note:''},{s:1500,note:'Pomodoro'},{s:1800,note:''},{s:2700,note:''},{s:3600,note:''}
+];
+let customPresets = store.get('presets', []);
+
+function applyAccent(){
+  const r = document.documentElement;
+  r.style.setProperty('--accent', S.accent);
+  const h = S.accent.replace('#','');
+  const [R,G,B] = [0,2,4].map(i => parseInt(h.substr(i,2),16)/255).map(c => c<=.03928?c/12.92:Math.pow((c+.055)/1.055,2.4));
+  const L = .2126*R+.7152*G+.0722*B;
+  r.style.setProperty('--on-accent', L > .45 ? '#16202A' : '#FFFFFF');
+  $('#accentPick').value = S.accent;
+  $$('.sw').forEach(b => b.setAttribute('aria-pressed', b.dataset.c.toLowerCase() === S.accent.toLowerCase()));
+}
+function applyTheme(){
+  if (S.theme === 'system') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', S.theme);
+}
+function setSeg(id, val){ $$('#'+id+' button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === val)); }
+
+SWATCHES.forEach(c => {
+  const b = document.createElement('button'); b.className='sw'; b.type='button'; b.dataset.c=c; b.style.background=c; b.setAttribute('aria-label','Accent '+c);
+  b.onclick = () => { S.accent = c; applyAccent(); save(); };
+  $('#swatches').insertBefore(b, $('#accentPick'));
+});
+$('#accentPick').oninput = e => { S.accent = e.target.value; applyAccent(); save(); };
+
+[['themeSeg','theme',applyTheme],['styleSeg','clockStyle',applyClockStyle],['marksSeg','marks',drawMarks]].forEach(([id,key,fn]) => {
+  setSeg(id, S[key]);
+  $$('#'+id+' button').forEach(b => b.onclick = () => { S[key] = b.dataset.v; setSeg(id, S[key]); fn(); save(); });
+});
+['h24','secs','sweep','showDate','lastTicks','flash','loop'].forEach(k => {
+  const el = $('#'+k); el.checked = !!S[k];
+  el.onchange = () => { S[k] = el.checked; save(); drawClock(); };
+});
+$('#tone').value = S.tone; $('#tone').onchange = e => { S.tone = e.target.value; save(); };
+$('#vol').value = S.vol; $('#vol').oninput = e => { S.vol = +e.target.value; save(); };
+$('#repeats').value = String(S.repeats); $('#repeats').onchange = e => { S.repeats = +e.target.value; save(); };
+
+const ZONES = [['local','Local time'],['UTC','UTC'],['America/Los_Angeles','Los Angeles'],['America/New_York','New York'],['America/Sao_Paulo','São Paulo'],
+  ['Europe/London','London'],['Europe/Paris','Paris'],['Europe/Berlin','Berlin'],['Asia/Dubai','Dubai'],['Asia/Kolkata','India'],['Asia/Singapore','Singapore'],
+  ['Asia/Tokyo','Tokyo'],['Australia/Sydney','Sydney']];
+ZONES.forEach(([v,l]) => { const o = document.createElement('option'); o.value=v; o.textContent=l; $('#tz').appendChild(o); });
+$('#tz').value = S.tz; $('#tz').onchange = e => { S.tz = e.target.value; save(); drawClock(); };
+
+/* ---------- audio ---------- */
+let ac = null;
+function ctx(){ if (!ac) { try { ac = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){ return null; } } if (ac.state==='suspended') ac.resume(); return ac; }
+function note(freq, start, dur, type='sine', gain=1){
+  const a = ctx(); if (!a || S.vol <= 0) return;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.value = freq;
+  const t = a.currentTime + start, v = Math.max(.0001, S.vol * gain * .5);
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(v, t+.01); g.gain.exponentialRampToValueAtTime(.0001, t+dur);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t+dur+.05);
+}
+const TONES = {
+  chime(){ note(659,0,1.1); note(880,.18,1.1); note(1319,.36,1.4,'sine',.8); },
+  bell(){ [523,1046,1569,2093].forEach((f,i) => note(f,0,1.8-i*.3,'sine',1/(i+1))); },
+  beep(){ [0,.22,.44].forEach(t => note(880,t,.14,'square',.5)); },
+  digital(){ [0,.1,.2,.3].forEach(t => note(2000,t,.06,'square',.4)); },
+  none(){}
+};
+const tick = () => note(1600,0,.035,'triangle',.35);
+
+let alarmTimer = null;
+function startAlarm(){
+  stopAlarm();
+  let n = 0; const max = S.repeats;
+  const ring = () => { TONES[S.tone](); n++; if (max && n >= max) { alarmTimer = setTimeout(stopAlarm, 1800); return; } alarmTimer = setTimeout(ring, 2000); };
+  ring();
+  if (S.flash) $('#stage').classList.add('ringing');
+  $('#tDismiss').hidden = false;
+}
+function stopAlarm(){
+  clearTimeout(alarmTimer); alarmTimer = null;
+  $('#stage').classList.remove('ringing'); $('#tDismiss').hidden = true;
+}
+$('#testSound').onclick = () => TONES[S.tone === 'none' ? 'chime' : S.tone]();
+$('#tDismiss').onclick = stopAlarm;
+
+/* ---------- views ---------- */
+let view = store.get('view', 'timer');
+function showView(v){
+  view = v; store.set('view', v);
+  $$('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.view === v));
+  ['clock','timer','stopwatch','f1','chaos'].forEach(k => { const el = $('#view-'+k); el.hidden = k !== v; if (k!=='clock') el.style.display = k===v ? 'flex' : 'none'; });
+  $('#side-timer').hidden = v !== 'timer'; $('#side-custom').hidden = v !== 'timer';
+  $('#side-f1').hidden = v !== 'f1'; $('#side-chaos').hidden = $('#side-chaos2').hidden = v !== 'chaos'; if (v !== 'chaos') chaosLeave(); $('#trivia').hidden = !(v === 'timer' || v === 'clock'); $('#numbox').hidden = v !== 'timer';
+  lastClockFact = 0; lastHistMin = null;
+  drawClock();
+}
+$$('.tabs button').forEach(b => b.onclick = () => showView(b.dataset.view));
+
+/* ---------- clock ---------- */
+function drawMarks(){
+  const g = $('#marks'); g.innerHTML = '';
+  const ns = 'http://www.w3.org/2000/svg';
+  for (let i=0;i<60;i++){
+    const major = i%5===0;
+    if (S.marks==='minimal' && i%15!==0) continue;
+    if (S.marks==='numerals' && !major) continue;
+    const a = i*6*Math.PI/180, r1 = major?82:87, r2 = 92;
+    if (S.marks==='numerals' && i%15===0) continue;
+    const l = document.createElementNS(ns,'line');
+    l.setAttribute('x1',100+r1*Math.sin(a)); l.setAttribute('y1',100-r1*Math.cos(a));
+    l.setAttribute('x2',100+r2*Math.sin(a)); l.setAttribute('y2',100-r2*Math.cos(a));
+    l.setAttribute('stroke', 'var(--face-ink)'); l.setAttribute('stroke-width', major?2.2:1); l.setAttribute('stroke-linecap','round');
+    l.setAttribute('opacity', major?.9:.45);
+    g.appendChild(l);
+  }
+  if (S.marks==='numerals'){
+    [[12,0],[3,90],[6,180],[9,270]].forEach(([n,deg]) => {
+      const a = deg*Math.PI/180, r = 80, t = document.createElementNS(ns,'text');
+      t.setAttribute('x',100+r*Math.sin(a)); t.setAttribute('y',100-r*Math.cos(a)+6);
+      t.setAttribute('text-anchor','middle'); t.setAttribute('fill','var(--face-ink)');
+      t.setAttribute('font-family','Azeret Mono, monospace'); t.setAttribute('font-size','17'); t.setAttribute('font-weight','500');
+      t.textContent = n; g.appendChild(t);
+    });
+  }
+}
+function applyClockStyle(){
+  $('#analog').style.display = S.clockStyle==='digital' ? 'none' : '';
+  $('#digital').style.display = S.clockStyle==='analog' ? 'none' : '';
+}
+function nowParts(){
+  const d = new Date();
+  if (S.tz === 'local') return {h:d.getHours(), m:d.getMinutes(), s:d.getSeconds(), ms:d.getMilliseconds(), d};
+  const p = {}; new Intl.DateTimeFormat('en-US',{timeZone:S.tz,hour:'numeric',minute:'numeric',second:'numeric',hourCycle:'h23'})
+    .formatToParts(d).forEach(x => p[x.type] = x.value);
+  return {h:+p.hour%24, m:+p.minute, s:+p.second, ms:d.getMilliseconds(), d};
+}
+const pad = n => String(n).padStart(2,'0');
+let lastDigital = '';
+function drawClock(){
+  if (view !== 'clock') return;
+  const {h,m,s,ms,d} = nowParts();
+  const sf = S.sweep ? s + ms/1000 : s;
+  $('#hHand').setAttribute('transform', `rotate(${(h%12)*30 + m*.5 + s/120} 100 100)`);
+  $('#mHand').setAttribute('transform', `rotate(${m*6 + sf*.1} 100 100)`);
+  $('#sHandG').setAttribute('transform', `rotate(${sf*6} 100 100)`);
+  $('#sHandG').style.display = S.secs ? '' : 'none';
+  let hh = h, ap = '';
+  if (!S.h24){ ap = h<12?'AM':'PM'; hh = h%12 || 12; }
+  const html = `<span>${S.h24?pad(hh):hh}:${pad(m)}</span>${S.secs?`<span class="sec">${pad(s)}</span>`:''}${ap?`<span class="ampm">${ap}</span>`:''}`;
+  if (html !== lastDigital){ $('#digital').innerHTML = html; lastDigital = html; }
+  const opts = {weekday:'long', year:'numeric', month:'long', day:'numeric'}; if (S.tz!=='local') opts.timeZone = S.tz;
+  $('#dateline').textContent = S.showDate ? d.toLocaleDateString(undefined, opts) : '';
+  $('#tzline').textContent = S.tz==='local' ? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'Local') : ZONES.find(z=>z[0]===S.tz)[1] + ' · ' + S.tz;
+}
+
+/* ---------- timer ---------- */
+const CIRC = 2*Math.PI*88;
+$('#ringFill').style.strokeDasharray = CIRC;
+const T = Object.assign({duration:300, remaining:300, endAt:0, running:false, label:'5 minutes', done:false}, store.get('timer', {}));
+if (T.running && T.endAt < Date.now()) { T.running = false; T.remaining = 0; T.done = true; }
+const saveT = () => store.set('timer', T);
+
+function fmt(sec, forceH){
+  if (T.duration < 60 && T.duration % 1 !== 0) return Math.max(0, sec).toFixed(2) + 's';
+  sec = Math.max(0, Math.ceil(sec));
+  const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60;
+  return (h||forceH) ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+function human(sec){
+  if (sec < 60) return `${sec} seconds`;
+  const h = Math.floor(sec/3600), m = Math.floor(sec%3600/60), s = sec%60;
+  const parts = []; if (h) parts.push(h+(h===1?' hour':' hours')); if (m) parts.push(m+(m===1?' minute':' minutes')); if (s) parts.push(s+' s');
+  return parts.join(' ');
+}
+function short(sec){
+  if (sec < 60) return sec+'s';
+  if (sec % 3600 === 0) return (sec/3600)+'h';
+  if (sec >= 3600) return Math.floor(sec/3600)+'h'+Math.floor(sec%3600/60)+'m';
+  return sec%60 ? Math.floor(sec/60)+'m'+(sec%60)+'s' : (sec/60)+' min';
+}
+function remainingNow(){ return T.running ? Math.max(0,(T.endAt - Date.now())/1000) : T.remaining; }
+let lastTickSec = null;
+function drawTimer(){
+  const rem = remainingNow();
+  $('#tRead').textContent = fmt(rem, T.duration >= 3600);
+  $('#tLabel').textContent = T.label;
+  const frac = T.duration ? rem / T.duration : 0;
+  $('#ringFill').style.strokeDashoffset = CIRC * (1 - frac);
+  $('#tSub').textContent = T.done ? "Time's up" : T.running ? 'Ends ' + new Date(T.endAt).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}) : (rem < T.duration ? 'Paused' : 'Ready');
+  $('#tStart').textContent = T.running ? 'Pause' : (rem < T.duration && rem > 0 ? 'Resume' : 'Start');
+  document.title = T.running ? `${fmt(rem)} · ${T.label}` : (T.done ? "Time's up · Tempo" : 'Tempo Clock');
+  $$('.preset').forEach(p => p.classList.toggle('active', +p.dataset.s === T.duration));
+  if (T.duration !== lastTriviaDur) renderTrivia(T.duration);
+}
+
+/* ---------- trivia ---------- */
+let lastTriviaDur = null;
+const C_KM_S = 299792.458, EQUATOR_KM = 40075.017, MOON_KM = 384400, SUN_S = 149597870.7 / 299792.458;
+function num(x){
+  const d = x >= 100 ? 0 : x >= 10 ? 1 : x >= 1 ? 1 : 2;
+  return x.toLocaleString(undefined, {maximumFractionDigits:d});
+}
+function dist(km){ return km >= 1 ? num(km) + ' km' : num(km*1000) + ' m'; }
+function factsFor(t){
+  return [
+    {big: num(C_KM_S*t/EQUATOR_KM)+'×', text:'Light could circle Earth at the equator', src:'c = 299,792.458 km/s (SI definition); equator 40,075 km (WGS 84)'},
+    {big: num(C_KM_S*t/(2*MOON_KM))+'×', text:'Light could make the round trip to the Moon', src:'Average Earth–Moon distance 384,400 km (NASA)'},
+    t < SUN_S
+      ? {big: num(t/SUN_S*100)+'%', text:'Of the 8 min 19 s it takes sunlight to reach Earth', src:'1 au = 149,597,870.7 km (IAU) ÷ speed of light'}
+      : {big: num(t/SUN_S)+'×', text:'The time sunlight takes to reach Earth (8 min 19 s)', src:'1 au = 149,597,870.7 km (IAU) ÷ speed of light'},
+    {big: num(t)+'–'+num(t*100/60), text:'Heartbeats for a resting adult', src:'Normal resting heart rate 60–100 bpm (American Heart Association)'},
+    {big: num(t*12/60)+'–'+num(t*20/60), text:'Breaths for a resting adult', src:'Normal adult resting rate 12–20 breaths/min (Cleveland Clinic)'},
+    {big: dist(29.78*t), text:'Earth travels along its orbit around the Sun', src:'Mean orbital speed 29.78 km/s (NASA Earth Fact Sheet)'},
+    {big: dist(28164*t/3600), text:'The International Space Station flies', src:'About 17,500 mph / 28,164 km/h (NASA)'},
+    {big: dist(0.343*t), text:'Sound travels through air', src:'343 m/s in dry air at 20 °C'},
+    {big: dist(0.1/9.58*t), text:'Covered at Usain Bolt’s 100 m world-record pace (if he could hold it)', src:'100 m in 9.58 s, Berlin 2009 (World Athletics)'},
+    {big: dist(42.195/7235*t), text:'Covered at Kelvin Kiptum’s marathon world-record pace', src:'2:00:35, Chicago 2023 (World Athletics)'},
+    {big: num(t/78.792), text:'Laps of Monza at the fastest F1 lap ever', src:'Max Verstappen, 1:18.792, 2025 Italian GP qualifying'},
+    {big: num(t/1.80), text:'Record F1 pit stops, back to back', src:'1.80 s, McLaren (Norris), 2023 Qatar GP'}
+  ];
+}
+const NOTES = {
+  's12': 'The Wright brothers’ first powered flight, on 17 December 1903, lasted 12 seconds.',
+  's30': 'Half a minute. A minute has 60 seconds because timekeeping inherited the Babylonians’ base-60 counting.',
+  's60': 'A minute has 60 seconds because timekeeping inherited the Babylonians’ base-60 counting.',
+  's273': 'John Cage’s famous “silent” piece 4′33″ (1952) lasts exactly this long.',
+  'm1': 'A minute has 60 seconds because timekeeping inherited the Babylonians’ base-60 counting.',
+  'm2': 'Two minutes is how long the American Dental Association recommends brushing your teeth.',
+  'm4': 'Roger Bannister ran the first sub-4-minute mile on 6 May 1954, in 3:59.4. The mile record is now 3:43.13 (Hicham El Guerrouj, 1999).',
+  'm5': 'The 5-minute break is the rest between focus blocks in the Pomodoro Technique.',
+  'm7': 'Seven, like the days in a week, a cycle that comes from ancient Babylon and the seven visible “wandering” objects of the sky.',
+  'm8': 'Sunlight takes about 8 minutes 19 seconds to reach Earth, so you always see the Sun as it was 8 minutes ago.',
+  'm12': 'Twelve hours on a clock face: the Egyptians split day and night into 12 parts each.',
+  'm15': 'A quarter of an hour, the unit most clocks chime on.',
+  'm24': 'The number of hours in a day.',
+  'm25': 'The Pomodoro Technique uses 25-minute focus blocks, named after Francesco Cirillo’s tomato-shaped kitchen timer.',
+  'm30': 'Half an hour. In 30 minutes the ISS covers about a third of an orbit.',
+  'm45': 'Each half of a football (soccer) match lasts 45 minutes under the Laws of the Game.',
+  'm60': '60 divides evenly by 1, 2, 3, 4, 5, 6, 10, 12, 15, 20 and 30, which is why the Babylonians liked it for time.',
+  'm90': 'Roughly one lap of Earth for the International Space Station, which orbits about every 90 minutes (NASA).'
+};
+const FIB = new Set([1,2,3,5,8,13,21,34,55,89,144,233,377,610,987]);
+function props(n){
+  const out = [];
+  if (n < 2) out.push('Neither prime nor composite');
+  else { let p = true; for (let i=2;i*i<=n;i++) if (n%i===0){p=false;break;} out.push(p ? 'Prime' : 'Composite'); }
+  if (Number.isInteger(Math.sqrt(n))) out.push('Perfect square');
+  if (Number.isInteger(Math.round(Math.cbrt(n))) && Math.round(Math.cbrt(n))**3 === n) out.push('Perfect cube');
+  if (Number.isInteger((Math.sqrt(8*n+1)-1)/2)) out.push('Triangular');
+  if (FIB.has(n)) out.push('Fibonacci');
+  if ([6,28,496,8128].includes(n)) out.push('Perfect number');
+  if (n > 0 && (n & (n-1)) === 0) out.push('Power of 2');
+  if ([1,2,6,24,120,720,5040].includes(n)) out.push('Factorial');
+  const s = String(n); if (s.length > 1 && s === [...s].reverse().join('')) out.push('Palindrome');
+  let d = 0; for (let i=1;i<=n;i++) if (n%i===0) d++; out.push(d + ' divisors');
+  return out;
+}
+function renderTrivia(t){
+  lastTriviaDur = t;
+  const secs = Math.round(t * 100) / 100;
+  const whole = Math.round(t);
+  const useMin = whole >= 60 && whole % 60 === 0;
+  const n = useMin ? whole/60 : whole;
+  $('#bignum').textContent = n;
+  $('#chips').innerHTML = (n > 0 ? props(n) : []).map(p => `<span class="chip">${p}</span>`).join('');
+  $('#numNote').textContent = NOTES['s'+whole] || (useMin ? NOTES['m'+n] : '') || (useMin ? `${n} minutes is ${(whole).toLocaleString()} seconds, or ${(whole*1000).toLocaleString()} milliseconds.` : `${n} seconds is ${(whole*1000).toLocaleString()} milliseconds.`);
+}
+const DYK = [
+  ['Since 1967 the second has been defined as 9,192,631,770 vibrations of a cesium-133 atom.', 'BIPM, SI Brochure'],
+  ['27 leap seconds have been added to clocks since 1972. The last one came on 31 December 2016, and they are due to be scrapped by 2035.', 'IERS; CGPM Resolution 4 (2022)'],
+  ['A sidereal day, one full spin of Earth relative to the stars, is 23 h 56 min 4 s, about 4 minutes shorter than a solar day.', 'NASA'],
+  ['A day on Venus (243 Earth days) is longer than its year (225 Earth days).', 'NASA Venus Fact Sheet'],
+  ['GPS satellite clocks run about 38 microseconds a day fast compared with clocks on the ground because of relativity, and the system corrects for it.', 'Ashby, Living Reviews in Relativity (2003)'],
+  ['Light from Proxima Centauri, the nearest star after the Sun, has travelled about 4.24 years to reach you.', 'NASA'],
+  ['The Planck time, about 5.39 × 10⁻⁴⁴ seconds, is the smallest meaningful unit of time in current physics.', 'CODATA 2018'],
+  ['Tidal friction from the Moon is slowly lengthening the day, by about 1.8 milliseconds per century.', 'Stephenson et al., Proc. R. Soc. A (2016)'],
+  ['China spans about five geographical time zones but uses a single official time, Beijing Time (UTC+8).', 'Chinese national standard time'],
+  ['Light from the Moon takes about 1.3 seconds to reach Earth.', '384,400 km ÷ speed of light']
+];
+let dykI = Math.floor(Math.random()*DYK.length);
+function showDyk(){ const [t,s] = DYK[dykI % DYK.length]; $('#dykText').textContent = t; $('#dykSrc').textContent = 'Source: ' + s; }
+$('#dykNext').onclick = () => { dykI++; showDyk(); };
+showDyk();
+/* ---------- live facts engine ---------- */
+const YEARS = {
+  0:'There was no year 0. In the Gregorian calendar 1 BC is followed directly by AD 1.',
+  43:'The Roman conquest of Britain began under Emperor Claudius.',
+  122:'Construction of Hadrian’s Wall began in northern Britain.',
+  325:'The First Council of Nicaea met, and later helped fix how the date of Easter is calculated.',
+  410:'The Visigoths under Alaric sacked Rome.',
+  537:'The Hagia Sophia in Constantinople was completed.',
+  711:'The Umayyad conquest of the Iberian Peninsula began.',
+  800:'Charlemagne was crowned Emperor of the Romans on Christmas Day.',
+  1206:'Genghis Khan was proclaimed ruler of the Mongols.',
+  1215:'King John sealed Magna Carta at Runnymede.',
+  1347:'The Black Death reached Europe through Sicily.',
+  1440:'Around this time Johannes Gutenberg developed movable-type printing in Mainz.',
+  1453:'Constantinople fell to the Ottoman Empire.',
+  1503:'Around this time Leonardo da Vinci began painting the Mona Lisa.',
+  1517:'Martin Luther published his Ninety-five Theses, starting the Reformation.',
+  1519:'Magellan’s fleet set sail on the voyage that became the first circumnavigation of Earth.',
+  1522:'The survivors of Magellan’s expedition, led by Juan Sebastián Elcano, completed the first circumnavigation.',
+  1543:'Copernicus published De revolutionibus, putting the Sun at the centre.',
+  1600:'The East India Company received its royal charter.',
+  1609:'Galileo began observing the sky with a telescope.',
+  1610:'Galileo discovered the four largest moons of Jupiter.',
+  1616:'William Shakespeare died.',
+  1620:'The Mayflower carried the Pilgrims to North America.',
+  1633:'Galileo was tried by the Roman Inquisition.',
+  1642:'Galileo died and Isaac Newton was born.',
+  1656:'Christiaan Huygens built the first pendulum clock, making clocks far more accurate.',
+  1707:'The Acts of Union created the Kingdom of Great Britain.',
+  1712:'Thomas Newcomen’s first working atmospheric steam engine went into use.',
+  1714:'Britain’s Longitude Act offered a prize for finding longitude at sea, which is really a problem of keeping accurate time.',
+  1752:'Britain switched to the Gregorian calendar: 2 September was followed by 14 September.',
+  1759:'John Harrison completed his H4 marine chronometer, which solved the longitude problem.',
+  1781:'William Herschel discovered Uranus.',
+  1783:'The Montgolfier brothers’ balloon made the first crewed flight.',
+  1800:'Alessandro Volta announced the first electric battery.',
+  1801:'Giuseppe Piazzi discovered Ceres on New Year’s Day.',
+  1803:'The United States bought the Louisiana Territory from France.',
+  1804:'Richard Trevithick’s steam locomotive made the first railway journey.',
+  1805:'The Battle of Trafalgar was fought.',
+  1807:'Britain passed the Slave Trade Act, abolishing the slave trade in its empire.',
+  1812:'Napoleon invaded Russia.',
+  1815:'The Battle of Waterloo ended Napoleon’s rule, and Mount Tambora erupted.',
+  1816:'The “Year Without a Summer” followed the Tambora eruption.',
+  1818:'Mary Shelley published Frankenstein.',
+  1819:'Stamford Raffles founded modern Singapore.',
+  1821:'Michael Faraday demonstrated electromagnetic rotation, the principle of the electric motor.',
+  1822:'Jean-François Champollion announced his decipherment of Egyptian hieroglyphs.',
+  1825:'The Stockton and Darlington Railway opened.',
+  1829:'Stephenson’s Rocket won the Rainhill Trials.',
+  1830:'The Liverpool and Manchester Railway opened, the first intercity passenger railway.',
+  1833:'Britain passed the Slavery Abolition Act.',
+  1837:'Victoria became Queen of the United Kingdom.',
+  1839:'The daguerreotype photographic process was announced in Paris.',
+  1840:'The Penny Black, the first adhesive postage stamp, was issued.',
+  1843:'Ada Lovelace published her notes on the Analytical Engine, including the first published algorithm for a machine.',
+  1844:'Samuel Morse sent “What hath God wrought” by telegraph.',
+  1846:'Neptune was discovered.',
+  1847:'British railways adopted Greenwich Mean Time as “railway time”.',
+  1848:'Revolutions spread across Europe, and the Communist Manifesto was published.',
+  1851:'The Great Exhibition opened in London’s Crystal Palace.',
+  1854:'John Snow traced a London cholera outbreak to the Broad Street pump.',
+  1859:'Darwin published On the Origin of Species, and Big Ben’s clock started keeping time.',
+  1900:'Max Planck introduced the quantum hypothesis.',
+  1901:'Marconi received the first transatlantic radio signal, and the first Nobel Prizes were awarded.',
+  1902:'Georges Méliès released the film A Trip to the Moon.',
+  1903:'The Wright brothers made the first powered airplane flight, lasting 12 seconds.',
+  1904:'The New York City Subway opened.',
+  1905:'Einstein published special relativity, which showed that moving clocks run slow.',
+  1906:'The San Francisco earthquake struck.',
+  1908:'Ford introduced the Model T, and the Tunguska event flattened a Siberian forest.',
+  1909:'Louis Blériot made the first airplane flight across the English Channel.',
+  1910:'Halley’s Comet made a widely watched return.',
+  1911:'Roald Amundsen’s team reached the South Pole.',
+  1912:'The Titanic sank on its maiden voyage.',
+  1913:'Ford introduced the moving assembly line.',
+  1914:'World War I began, and the Panama Canal opened.',
+  1915:'Einstein completed the general theory of relativity.',
+  1916:'Germany introduced daylight saving time, and Britain soon followed.',
+  1917:'The Russian Revolution took place.',
+  1918:'World War I ended.',
+  1919:'Eclipse observations led by Arthur Eddington confirmed that gravity bends light.',
+  1920:'The 19th Amendment gave American women the vote, and KDKA made the first commercial radio broadcast.',
+  1921:'Frederick Banting and Charles Best discovered insulin.',
+  1922:'Howard Carter found the tomb of Tutankhamun, and the BBC was founded.',
+  1923:'The first issue of Time magazine was published.',
+  1924:'The first Winter Olympics were held in Chamonix, and the BBC broadcast the Greenwich time signal “pips” for the first time.',
+  1925:'John Logie Baird demonstrated television in London.',
+  1926:'Robert Goddard launched the first liquid-fuelled rocket.',
+  1927:'Charles Lindbergh flew solo across the Atlantic, and Bell Labs built the first quartz clock.',
+  1928:'Alexander Fleming discovered penicillin.',
+  1929:'The Wall Street Crash began the Great Depression.',
+  1930:'Pluto was discovered, and Uruguay hosted the first FIFA World Cup.',
+  1931:'The Empire State Building opened.',
+  1932:'James Chadwick discovered the neutron.',
+  1935:'Robert Watson-Watt demonstrated radar detection of an aircraft.',
+  1936:'Alan Turing published “On Computable Numbers”.',
+  1937:'The Golden Gate Bridge opened.',
+  1938:'Otto Hahn and Fritz Strassmann discovered nuclear fission.',
+  1939:'World War II began.',
+  1941:'Japan attacked Pearl Harbor.',
+  1942:'Chicago Pile-1 achieved the first self-sustaining nuclear chain reaction.',
+  1944:'Allied forces landed in Normandy on D-Day.',
+  1945:'World War II ended, and the United Nations was founded.',
+  1946:'ENIAC, an early general-purpose electronic computer, was unveiled.',
+  1947:'Bell Labs invented the transistor, and Chuck Yeager broke the sound barrier.',
+  1948:'Britain’s National Health Service was founded.',
+  1949:'The US National Bureau of Standards built the first atomic clock, based on ammonia.',
+  1950:'The first Formula One World Championship race was held at Silverstone on 13 May.',
+  1953:'Watson and Crick described DNA’s double helix, and Hillary and Tenzing reached the summit of Everest.',
+  1954:'Roger Bannister ran the first sub-4-minute mile, in 3:59.4.',
+  1955:'Louis Essen and Jack Parry built the first caesium atomic clock at Britain’s National Physical Laboratory.',
+  1957:'The Soviet Union launched Sputnik 1, the first artificial satellite.',
+  1958:'NASA was founded.',
+  2000:'The first crew moved into the International Space Station, and it has been occupied ever since.',
+  2001:'Wikipedia launched.',
+  2003:'The Human Genome Project was completed.',
+  2004:'Facebook was founded.',
+  2007:'Apple introduced the iPhone.',
+  2008:'Lewis Hamilton won his first F1 World Championship, and the Large Hadron Collider was switched on.',
+  2009:'Usain Bolt ran 100 m in 9.58 seconds in Berlin.',
+  2012:'The Higgs boson was discovered, and the Curiosity rover landed on Mars.',
+  2015:'LIGO detected gravitational waves for the first time.',
+  2016:'The most recent leap second was added, on 31 December.',
+  2019:'Astronomers released the first image of a black hole.',
+  2020:'The COVID-19 pandemic spread worldwide.',
+  2021:'The James Webb Space Telescope launched on Christmas Day.',
+  2022:'The General Conference on Weights and Measures voted to stop adding leap seconds by 2035.',
+  2023:'Max Verstappen won a record 19 F1 races in one season, and Kelvin Kiptum ran a 2:00:35 marathon.',
+  2025:'Max Verstappen won the fastest F1 race ever, at Monza.'
+};
+function yearFact(hh, mm){
+  const y = hh*100 + mm, label = `${pad(hh)}:${pad(mm)} → the year ${y}`;
+  const nowY = new Date().getFullYear();
+  if (y > nowY) return {label, text:`The year ${y} hasn’t happened yet. It is ${(y-nowY).toLocaleString()} years away.`};
+  if (y === nowY) return {label, text:`That’s this year. History is still being written.`};
+  if (YEARS[y]) return {label, text: YEARS[y]};
+  const keys = Object.keys(YEARS).map(Number).filter(k => YEARS[k] && k < y && Math.floor(k/100) === hh);
+  if (keys.length){ const k = keys[keys.length-1]; return {label, text:`Nothing famous on file for ${y}. The closest earlier year on file is ${k}: ${YEARS[k]}`}; }
+  return {label, text:`Nothing famous on file for ${y}. Check back in a minute.`};
+}
+
+const MOMENTS = {
+  1:['1 second: light from the Moon takes about 1.3 s to reach you.','Average Earth–Moon distance 384,400 km (NASA) ÷ speed of light'],
+  2:['2 seconds: a record F1 pit stop (1.80 s) would already be finished.','McLaren, Lando Norris, 2023 Qatar GP (DHL Fastest Pit Stop)'],
+  10:['10 seconds: Usain Bolt ran the whole 100 m in 9.58 s.','World record, Berlin 2009 (World Athletics)'],
+  12:['12 seconds: the length of the Wright brothers’ first powered flight in 1903.','Smithsonian National Air and Space Museum'],
+  60:['One minute left. We count 60 seconds to a minute because of Babylonian base-60 counting.','History of sexagesimal timekeeping'],
+  79:['1:19: one lap of Monza at Verstappen’s record 1:18.792.','2025 Italian GP qualifying, avg 264.681 km/h (Formula1.com)'],
+  120:['Two minutes: the American Dental Association’s recommended tooth-brushing time.','American Dental Association'],
+  207:['3:27: the entire 2021 Belgian Grand Prix, the shortest F1 race ever (3:27.071).','Formula1.com'],
+  223:['3:43: Hicham El Guerrouj’s mile world record is 3:43.13.','Rome 1999 (World Athletics)'],
+  239:['3:59: Roger Bannister ran the first sub-4-minute mile in 3:59.4.','Oxford, 6 May 1954'],
+  273:['4:33: exactly the length of John Cage’s “silent” piece 4′33″.','Composed 1952'],
+  300:['Five minutes: the classic Pomodoro short break.','Francesco Cirillo, The Pomodoro Technique'],
+  499:['8:19: the time sunlight takes to reach Earth.','1 au = 149,597,870.7 km (IAU) ÷ speed of light'],
+  1500:['25 minutes: one full Pomodoro focus block.','Francesco Cirillo, The Pomodoro Technique']
+};
+function factorize(n){ const f=[]; let m=n; for (let p=2;p*p<=m;p++) while (m%p===0){ f.push(p); m/=p; } if (m>1) f.push(m); return f; }
+function numberFact(n){
+  if (n < 2) return {text:`${n} is neither prime nor composite.`, more:'By definition a prime has exactly two divisors: 1 and itself.', src:'Number theory'};
+  const f = factorize(n), p = props(n).filter(x => !/divisors|Composite/.test(x));
+  if (f.length === 1) return {text:`${n} is a prime number.`, more:`${n} can only be divided evenly by 1 and ${n}.` + (p.length>1 ? ' It is also: ' + p.slice(1).join(', ') + '.' : ''), src:'Computed'};
+  return {text:`${n} = ${f.join(' × ')}`, more:`The prime factors of ${n}.` + (p.length ? ' It is also: ' + p.join(', ') + '.' : ''), src:'Computed'};
+}
+const TIMER_GENS = [
+  r => ({text:`In ${r} s light travels ${num(C_KM_S*r)} km, enough to circle Earth ${num(C_KM_S*r/EQUATOR_KM)} times.`, more:'Light in a vacuum travels exactly 299,792.458 km every second. That speed is how the metre itself is defined.', src:'SI definition; equator 40,075 km (WGS 84)'}),
+  r => ({text:`A resting heart beats ${num(r)}–${num(r*100/60)} times in ${r} s.`, more:'A normal resting adult heart rate is 60 to 100 beats per minute. Fitter people are often at the lower end.', src:'American Heart Association'}),
+  r => ({text:`Earth moves ${dist(29.78*r)} around the Sun in ${r} s.`, more:'Earth orbits the Sun at an average of 29.78 km every second, although we feel none of it.', src:'NASA Earth Fact Sheet'}),
+  r => numberFact(r),
+  r => ({text:`The ISS covers ${dist(28164*r/3600)} in ${r} s.`, more:'The International Space Station travels about 28,000 km/h and circles Earth roughly every 90 minutes, so the crew sees about 16 sunrises a day.', src:'NASA'}),
+  r => ({text:`Sound travels ${dist(0.343*r)} in ${r} s.`, more:'Sound moves through dry air at about 343 m/s at 20 °C. Counting the seconds between lightning and thunder uses this.', src:'Standard speed of sound in air'}),
+  r => ({text:`${num(r/78.792)} laps of Monza at F1’s fastest-ever lap pace fit into ${r} s.`, more:'Max Verstappen lapped Monza in 1:18.792 in qualifying for the 2025 Italian GP, an average of 264.681 km/h.', src:'Formula1.com'}),
+  r => ({text:`Kelvin Kiptum’s record marathon pace covers ${dist(42.195/7235*r)} in ${r} s.`, more:'Kiptum ran the marathon in 2:00:35 in Chicago in 2023, averaging about 2 min 52 s per kilometre.', src:'World Athletics'}),
+  r => ({text:`${num(r/1.80)} record F1 pit stops could happen back to back in ${r} s.`, more:'McLaren changed all four tyres on Lando Norris’s car in 1.80 s at the 2023 Qatar GP, the fastest pit stop recorded.', src:'DHL Fastest Pit Stop Award'})
+];
+function timerFact(rem){
+  const r = Math.max(0, Math.ceil(rem)), mm = Math.floor(r/60), ss = r%60;
+  if (MOMENTS[r]) return {kind:'Milestone', text:MOMENTS[r][0], more:MOMENTS[r][0], src:MOMENTS[r][1]};
+  if (mm >= 10 && mm <= 20 && YEARS[mm*100+ss]) return {kind:'History', text:`${pad(mm)}:${pad(ss)} is also the year ${mm*100+ss}. ${YEARS[mm*100+ss]}`, more:YEARS[mm*100+ss], src:'Historical record'};
+  if (r === 0) return {kind:'Done', text:"Time's up!", more:'', src:''};
+  const f = TIMER_GENS[r % TIMER_GENS.length](r);
+  return Object.assign({kind:'Fun fact'}, f);
+}
+const CLOCK_GENS = [
+  n => { const s = n.h*3600+n.m*60+n.s; return {text:`${(s/864).toFixed(1)}% of today has passed.`, more:`${s.toLocaleString()} of the day’s 86,400 seconds are gone. ${(86400-s).toLocaleString()} remain until midnight.`, src:'Computed from your clock'}; },
+  n => { const s = n.h*3600+n.m*60+n.s; return {text:`Since midnight a resting heart has beaten about ${num(s)}–${num(s*100/60)} times.`, more:'Based on a normal resting rate of 60 to 100 beats per minute. Sleep lowers it and exercise raises it.', src:'American Heart Association'}; },
+  n => { const s = n.h*3600+n.m*60+n.s; return {text:`Since midnight Earth has carried you ${num(29.78*s)} km around the Sun.`, more:'Earth orbits at an average of 29.78 km/s, which is about 2.57 million km a day.', src:'NASA Earth Fact Sheet'}; },
+  n => { const s = n.h*3600+n.m*60+n.s; return {text:`The ISS has circled Earth about ${num(s/5400)} times since midnight.`, more:'The International Space Station completes an orbit roughly every 90 minutes.', src:'NASA'}; },
+  n => { const d = n.d, start = new Date(d.getFullYear(),0,1), doy = Math.floor((d - start)/864e5)+1, len = (new Date(d.getFullYear(),1,29).getDate()===29)?366:365; return {text:`Today is day ${doy} of ${len}. ${len-doy} days are left this year.`, more:`${(doy/len*100).toFixed(1)}% of ${d.getFullYear()} is complete.` + (len===366?' This is a leap year.':''), src:'Gregorian calendar'}; },
+  n => ({text:`Unix time is now ${Math.floor(n.d.getTime()/1000).toLocaleString()}.`, more:'Computers count time as seconds since 00:00 UTC on 1 January 1970. Systems that store it as a signed 32-bit number run out on 19 January 2038.', src:'POSIX time'}),
+  n => { const t = new Date(n.d.getTime() - 499000); return {text:`The sunlight reaching you now left the Sun at ${t.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'})}.`, more:'Sunlight takes about 8 minutes 19 seconds to cross the 149.6 million km to Earth.', src:'1 au (IAU) ÷ speed of light'}; },
+  n => { const f = z => n.d.toLocaleTimeString([], {timeZone:z, hour:'2-digit', minute:'2-digit'}); return {text:`Right now it’s ${f('Europe/London')} in London, ${f('America/New_York')} in New York and ${f('Asia/Tokyo')} in Tokyo.`, more:`Also ${f('Asia/Kolkata')} in India, ${f('Australia/Sydney')} in Sydney and ${f('America/Los_Angeles')} in Los Angeles.`, src:'IANA time zone database'}; },
+  n => { const v = n.h*100+n.m; return Object.assign(numberFact(v), {text:`Read as a number, ${pad(n.h)}${pad(n.m)} → ` + numberFact(v).text}); },
+  n => { const s = n.h*3600+n.m*60+n.s; return {text:`At the equator, Earth’s spin has carried you ${num(1674.4*s/3600)} km since midnight.`, more:'The equator moves at about 1,674 km/h as Earth turns once every 23 h 56 min.', src:'Computed from equator 40,075 km and the sidereal day'}; }
+];
+
+/* fact display + log */
+const logEl = $('#log'); let logN = 0;
+function showFact(el, f, tag, kind){
+  el.classList.add('out');
+  setTimeout(() => {
+    el.innerHTML = `<span class="fk">${f.kind || 'Fun fact'}</span><span class="ft">${f.text}</span>${f.src ? `<span class="fs">Source: ${f.src}</span>` : ''}`;
+    el.classList.remove('out');
+  }, 180);
+  if (!f.text || f.kind === 'Done') return;
+  if (!logN) logEl.innerHTML = '';
+  logN++;
+  const d = document.createElement('details');
+  d.innerHTML = `<summary><span class="tag">${tag}<em>${kind}</em></span><span>${f.text}</span></summary>${f.more && f.more !== f.text ? `<p>${f.more}</p>` : ''}${f.src ? `<small>Source: ${f.src}</small>` : ''}`;
+  logEl.prepend(d);
+  while (logEl.children.length > 400) logEl.lastChild.remove();
+  $('#logCount').textContent = `${logN.toLocaleString()} fact${logN===1?'':'s'} seen`;
+}
+$('#logClear').onclick = () => { logN = 0; logEl.innerHTML = '<div class="empty">Every fact that appears is saved here. Tap one to read more.</div>'; $('#logCount').textContent = 'No facts yet'; };
+
+let lastFactSec = null, lastClockFact = 0, clockGenI = 0, lastHistMin = null;
+function timerFactTick(force){
+  const rem = remainingNow(), whole = Math.ceil(rem);
+  if (!force && whole === lastFactSec) return;
+  lastFactSec = whole;
+  showFact($('#tFact'), timerFact(rem), fmt(rem), 'timer');
+}
+function clockFactTick(){
+  if (view !== 'clock') return;
+  const n = nowParts();
+  const minKey = n.h*60 + n.m;
+  if (minKey !== lastHistMin){
+    lastHistMin = minKey;
+    const y = yearFact(n.h, n.m);
+    $('#histYear').textContent = y.label; $('#histText').textContent = y.text;
+    logHistory({text:`${y.label}: ${y.text}`, src:'Historical record'}, `${pad(n.h)}:${pad(n.m)}`);
+  }
+  if (Date.now() - lastClockFact >= 5000){
+    lastClockFact = Date.now();
+    const f = CLOCK_GENS[clockGenI++ % CLOCK_GENS.length](n);
+    f.kind = 'Right now';
+    showFact($('#cFact'), f, `${pad(n.h)}:${pad(n.m)}:${pad(n.s)}`, 'clock');
+  }
+}
+function logHistory(f, tag){
+  if (!logN) logEl.innerHTML = '';
+  logN++;
+  const d = document.createElement('details');
+  d.innerHTML = `<summary><span class="tag">${tag}<em>history</em></span><span>${f.text}</span></summary><small>Source: ${f.src}</small>`;
+  logEl.prepend(d);
+  $('#logCount').textContent = `${logN.toLocaleString()} fact${logN===1?'':'s'} seen`;
+}
+setInterval(clockFactTick, 250);
+
+function checkTimer(){
+  if (!T.running) return;
+  const rem = remainingNow(), whole = Math.ceil(rem);
+  timerFactTick();
+  if (S.lastTicks && whole <= 10 && whole > 0 && whole !== lastTickSec){ lastTickSec = whole; tick(); }
+  if (rem <= 0){
+    T.running = false; T.remaining = 0; T.done = true; saveT();
+    startAlarm();
+    if (S.loop) setTimeout(() => { if (!T.running) { T.remaining = T.duration; T.done = false; startTimer(); } }, 1500);
+  }
+}
+function startTimer(){
+  ctx();
+  if (T.remaining <= 0) T.remaining = T.duration;
+  T.endAt = Date.now() + T.remaining*1000; T.running = true; T.done = false; lastTickSec = null;
+  stopAlarm(); saveT(); requestWake(); drawTimer();
+}
+function pauseTimer(){ T.remaining = remainingNow(); T.running = false; saveT(); drawTimer(); }
+function resetTimer(){ T.running = false; T.remaining = T.duration; T.done = false; stopAlarm(); saveT(); drawTimer(); }
+function setTimer(sec, label, autostart=true){
+  sec = Math.max(0.5, Math.min(99*3600+59*60+59, Math.round(sec*1000)/1000));
+  T.duration = sec; T.remaining = sec; T.running = false; T.done = false; T.label = label || human(sec);
+  stopAlarm(); saveT();
+  if (autostart) startTimer(); else drawTimer();
+}
+$('#tStart').onclick = () => T.running ? pauseTimer() : startTimer();
+$('#tReset').onclick = resetTimer;
+$$('[data-adj]').forEach(b => b.onclick = () => {
+  const d = +b.dataset.adj;
+  if (T.running){ T.endAt = Math.max(Date.now()+1000, T.endAt + d*1000); T.duration = Math.max(1, T.duration + d); }
+  else { T.remaining = Math.max(1, Math.round(T.remaining) + d); T.duration = Math.max(T.remaining, T.duration + d); T.done = false; }
+  if (T.duration < remainingNow()) T.duration = Math.ceil(remainingNow());
+  saveT(); drawTimer();
+});
+
+function renderPresets(){
+  const box = $('#presets'); box.innerHTML = '';
+  const all = DEFAULT_PRESETS.map(p => ({...p, custom:false})).concat(customPresets.map((p,i) => ({...p, custom:true, i})));
+  all.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'preset'; el.tabIndex = 0; el.dataset.s = p.s; el.setAttribute('role','button');
+    el.setAttribute('aria-label', `Start ${p.note || human(p.s)} timer`);
+    el.innerHTML = `<b>${short(p.s)}</b><small>${p.note ? escapeHtml(p.note) : human(p.s)}</small>` + (p.custom ? `<button class="x" aria-label="Remove preset" title="Remove">×</button>` : '');
+    const go = () => setTimer(p.s, p.note && p.custom ? p.note : (p.note ? `${p.note} · ${human(p.s)}` : human(p.s)));
+    el.onclick = e => { if (e.target.classList.contains('x')) { customPresets.splice(p.i,1); store.set('presets', customPresets); renderPresets(); return; } go(); };
+    el.onkeydown = e => { if (e.key==='Enter' || e.key===' ') { e.preventDefault(); go(); } };
+    box.appendChild(el);
+  });
+  drawTimer();
+}
+const escapeHtml = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function readCustom(){
+  const h = +$('#cH').value||0, m = +$('#cM').value||0, s = +$('#cS').value||0;
+  return h*3600 + m*60 + s;
+}
+$('#customForm').addEventListener('submit', e => { e.preventDefault(); const sec = readCustom(); if (sec>0) setTimer(sec, $('#cLabel').value.trim()); });
+$('#savePreset').onclick = () => {
+  const sec = readCustom(); if (sec <= 0) return;
+  customPresets.push({s:sec, note:$('#cLabel').value.trim() || 'Custom'}); store.set('presets', customPresets); renderPresets();
+  $('#savePreset').textContent = 'Saved'; setTimeout(() => $('#savePreset').textContent = 'Save as preset', 1200);
+};
+
+let wake = null;
+async function requestWake(){ try { if ('wakeLock' in navigator && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => wake = null); } } catch(e){} }
+
+/* ---------- stopwatch ---------- */
+const W = Object.assign({start:0, acc:0, running:false, laps:[]}, store.get('sw', {}));
+const saveW = () => store.set('sw', W);
+const elapsed = () => W.acc + (W.running ? Date.now() - W.start : 0);
+function fmtSW(ms){
+  const cs = Math.floor(ms/10)%100, s = Math.floor(ms/1000)%60, m = Math.floor(ms/60000)%60, h = Math.floor(ms/3600000);
+  return {main: (h?h+':'+pad(m):pad(m)) + ':' + pad(s), cs: '.'+pad(cs)};
+}
+function drawSW(){
+  const f = fmtSW(elapsed());
+  $('#swRead').innerHTML = `${f.main}<span class="cs">${f.cs}</span>`;
+  $('#swStart').textContent = W.running ? 'Stop' : (W.acc ? 'Resume' : 'Start');
+  $('#swLap').disabled = !W.running;
+}
+function renderLaps(){
+  const box = $('#laps');
+  if (!W.laps.length){ box.innerHTML = '<div class="empty">Laps appear here. Press <kbd>L</kbd> or Lap while running.</div>'; return; }
+  const splits = W.laps.map((t,i) => t - (W.laps[i-1]||0));
+  const min = Math.min(...splits), max = Math.max(...splits);
+  let rows = '';
+  for (let i = W.laps.length-1; i >= 0; i--){
+    const sp = fmtSW(splits[i]), tot = fmtSW(W.laps[i]);
+    const cls = W.laps.length > 2 ? (splits[i]===min?'fast':splits[i]===max?'slow':'') : '';
+    rows += `<tr class="${cls}"><td>Lap ${i+1}</td><td>${sp.main}${sp.cs}</td><td>${tot.main}${tot.cs}</td></tr>`;
+  }
+  box.innerHTML = `<table><thead><tr><th>Lap</th><th>Split</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+$('#swStart').onclick = () => {
+  if (W.running){ W.acc = elapsed(); W.running = false; } else { W.start = Date.now(); W.running = true; }
+  saveW(); drawSW();
+};
+$('#swLap').onclick = () => { if (!W.running) return; W.laps.push(elapsed()); saveW(); renderLaps(); };
+$('#swReset').onclick = () => { W.acc = 0; W.running = false; W.laps = []; saveW(); drawSW(); renderLaps(); };
+
+/* ---------- F1 records ---------- */
+const RECORDS = [
+  {t:1.80, show:'1.80 s', what:'Fastest pit stop ever', who:'McLaren, Lando Norris · 2023 Qatar GP'},
+  {t:78.792, show:'1:18.792', what:'Fastest lap in F1 history', who:'Max Verstappen · 2025 Italian GP qualifying · avg 264.681 km/h'},
+  {t:78.887, show:'1:18.887', what:'Previous fastest lap', who:'Lewis Hamilton · 2020 Italian GP qualifying · avg 264.362 km/h'},
+  {t:207.071, show:'3:27.071', what:'Shortest race ever', who:'2021 Belgian GP · 1 lap behind the safety car in heavy rain'},
+  {t:4404.325, show:'1:13:24.325', what:'Fastest race ever', who:'Max Verstappen · 2025 Italian GP · avg 250.706 km/h, beating Schumacher’s 2003 record'},
+  {t:14679.537, show:'4:04:39.537', what:'Longest race ever', who:'Jenson Button · 2011 Canadian GP · incl. a 2 h 4 min rain stoppage'},
+  {t:null, show:'0.010 s', what:'Closest finish', who:'Peter Gethin beat Ronnie Peterson · 1971 Italian GP'},
+  {t:null, show:'0.011 s', what:'Second-closest finish', who:'Rubens Barrichello beat Michael Schumacher · 2002 US GP'},
+  {t:null, show:'2 laps', what:'Biggest winning margin', who:'Jackie Stewart · 1969 Spanish GP'},
+  {t:null, show:'19 wins', what:'Most wins in one season', who:'Max Verstappen · 2023'}
+];
+$('#records').innerHTML = RECORDS.map((r,i) => `<div class="rec"><b>${r.show}</b>${r.t ? `<button class="btn small" data-rec="${i}" type="button">Time it</button>` : ''}<span>${r.what}</span><small>${r.who}</small></div>`).join('');
+$$('[data-rec]').forEach(b => b.onclick = () => { const r = RECORDS[+b.dataset.rec]; setTimer(r.t, `${r.what} · ${r.show}`, false); showView('timer'); });
+
+/* ---------- lights out ---------- */
+$('#lights').innerHTML = Array.from({length:5}, () => '<div class="pod"><i></i><i class="red"></i><i class="red"></i></div>').join('');
+const L = {state:'idle', timers:[], outAt:0, best: store.get('reactBest', null)};
+const pods = () => $$('#lights .pod');
+function showBest(){ $('#reactBest').textContent = L.best ? `Your best: ${(L.best/1000).toFixed(3)} s · Press Space or tap to go again` : 'Press Space or tap to start'; }
+function lightsReset(){ L.timers.forEach(clearTimeout); L.timers = []; pods().forEach(p => p.classList.remove('on')); }
+function lightsGo(){
+  ctx(); lightsReset(); L.state = 'arming';
+  $('#reactRead').textContent = '0.000'; $('#reactMsg').textContent = 'Wait for the lights to go out…'; $('#hit').textContent = 'React!';
+  pods().forEach((p,i) => L.timers.push(setTimeout(() => { p.classList.add('on'); note(440,0,.12,'sine',.4); }, 800 + i*1000)));
+  const hold = 800 + 4*1000 + 400 + Math.random()*2600;
+  L.timers.push(setTimeout(() => { pods().forEach(p => p.classList.remove('on')); L.outAt = performance.now(); L.state = 'go'; }, hold));
+}
+function lightsHit(){
+  if (L.state === 'idle' || L.state === 'done'){ lightsGo(); return; }
+  if (L.state === 'arming'){
+    lightsReset(); L.state = 'done';
+    $('#reactRead').textContent = 'JUMP START'; $('#reactMsg').textContent = 'You went before the lights went out. That’s a penalty.';
+    $('#hit').textContent = 'Try again'; note(180,0,.4,'square',.4); return;
+  }
+  if (L.state === 'go'){
+    const ms = performance.now() - L.outAt; L.state = 'done';
+    $('#reactRead').textContent = (ms/1000).toFixed(3) + ' s';
+    const isBest = !L.best || ms < L.best; if (isBest){ L.best = ms; store.set('reactBest', ms); }
+    $('#reactMsg').textContent = (isBest ? 'New personal best. ' : '') + `A record 1.80 s pit stop would be ${(ms/1800*100).toFixed(0)}% done by now.`;
+    $('#hit').textContent = 'Go again'; showBest();
+  }
+}
+$('#hit').addEventListener('pointerdown', e => { e.preventDefault(); lightsHit(); });
+$('#hit').addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); lightsHit(); } });
+showBest();
+
+/* ---------- chaos mode ---------- */
+const LANGS = {
+  en:{loc:'en-US', title:'Chaos mode', speed:'Speed', facts:['A day on Venus is longer than its year.','Sunlight takes about 8 minutes to reach Earth.','There was no year 0.','The second is defined by the cesium-133 atom.','Earth moves about 30 km around the Sun every second.','In 1752 Britain skipped 11 days to switch calendars.']},
+  es:{loc:'es-ES', title:'Modo caos', speed:'Velocidad', facts:['Un día en Venus dura más que su año.','La luz del Sol tarda unos 8 minutos en llegar a la Tierra.','El año 0 no existió.','El segundo se define con el átomo de cesio-133.','La Tierra recorre unos 30 km alrededor del Sol cada segundo.','En 1752 Gran Bretaña se saltó 11 días al cambiar de calendario.']},
+  fr:{loc:'fr-FR', title:'Mode chaos', speed:'Vitesse', facts:['Un jour sur Vénus dure plus longtemps que son année.','La lumière du Soleil met environ 8 minutes pour atteindre la Terre.','L’an 0 n’a jamais existé.','La seconde est définie par l’atome de césium 133.','La Terre parcourt environ 30 km autour du Soleil chaque seconde.','En 1752, la Grande-Bretagne a sauté 11 jours pour changer de calendrier.']},
+  de:{loc:'de-DE', title:'Chaosmodus', speed:'Tempo', facts:['Ein Tag auf der Venus dauert länger als ihr Jahr.','Sonnenlicht braucht etwa 8 Minuten bis zur Erde.','Ein Jahr 0 hat es nie gegeben.','Die Sekunde ist über das Cäsium-133-Atom definiert.','Die Erde legt jede Sekunde etwa 30 km um die Sonne zurück.','1752 übersprang Großbritannien 11 Tage, um den Kalender zu wechseln.']},
+  ja:{loc:'ja-JP', title:'カオスモード', speed:'速度', facts:['金星の一日は、金星の一年より長い。','太陽の光が地球に届くまで約8分かかる。','西暦0年は存在しない。','1秒はセシウム133原子で定義されている。','地球は毎秒約30kmの速さで太陽の周りを回っている。','1752年、イギリスは暦を変えるために11日間を飛ばした。']},
+  hi:{loc:'hi-IN', title:'अराजकता मोड', speed:'गति', facts:['शुक्र ग्रह पर एक दिन उसके एक साल से लंबा होता है।','सूरज की रोशनी को पृथ्वी तक पहुँचने में लगभग 8 मिनट लगते हैं।','वर्ष 0 कभी था ही नहीं।','एक सेकंड की परिभाषा सीज़ियम-133 परमाणु से तय होती है।','पृथ्वी हर सेकंड सूरज के चारों ओर लगभग 30 किमी चलती है।','1752 में ब्रिटेन ने कैलेंडर बदलने के लिए 11 दिन छोड़ दिए।']},
+  it:{loc:'it-IT', title:'Modalità caos', speed:'Velocità', facts:['Un giorno su Venere dura più del suo anno.','La luce del Sole impiega circa 8 minuti per raggiungere la Terra.','L’anno 0 non è mai esistito.','Il secondo è definito dall’atomo di cesio 133.','La Terra percorre circa 30 km intorno al Sole ogni secondo.','Nel 1752 la Gran Bretagna saltò 11 giorni per cambiare calendario.']},
+  pt:{loc:'pt-BR', title:'Modo caos', speed:'Velocidade', facts:['Um dia em Vênus dura mais que o seu ano.','A luz do Sol leva cerca de 8 minutos para chegar à Terra.','O ano 0 nunca existiu.','O segundo é definido pelo átomo de césio-133.','A Terra percorre cerca de 30 km ao redor do Sol a cada segundo.','Em 1752 a Grã-Bretanha pulou 11 dias para trocar de calendário.']}
+};
+const FACT_SRC = ['NASA Venus Fact Sheet','1 au (IAU) ÷ speed of light','Gregorian calendar','BIPM, SI Brochure','NASA Earth Fact Sheet','Calendar (New Style) Act 1750'];
+const DIGITS = ['latn','arab','deva','thai','beng','fullwide','hanidec','tibt','khmr','mymr'];
+const FONTS = ['var(--mono)','var(--sans)','"Bungee", Impact, sans-serif','"Press Start 2P", monospace','Georgia, "Times New Roman", serif','"Comic Sans MS", "Comic Neue", cursive','"Courier New", monospace'];
+const WAVES = ['sine','square','sawtooth','triangle'];
+const C = {on:false, vt:Date.now(), rate:1, last:0, stopUntil:0, lang:'en', nu:'latn', tz:undefined, jitterUntil:0, next:0, factAt:0, factI:0, lastSec:null, wave:'triangle', pitch:1600, timers:[], token:0};
+const stage = $('#stage');
+const R = (a,b) => a + Math.random()*(b-a);
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const later = (fn, ms) => C.timers.push(setTimeout(fn, ms));
+
+function sweep(f1, f2, dur, type='sawtooth', gain=.5){
+  if (!$('#cSnd').checked) return;
+  const a = ctx(); if (!a || S.vol <= 0) return;
+  const o = a.createOscillator(), g = a.createGain(), t = a.currentTime;
+  o.type = type; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t+dur);
+  g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(S.vol*gain*.4, t+.03); g.gain.exponentialRampToValueAtTime(.0001, t+dur);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t+dur+.05);
+}
+function cnum(n){ try { return new Intl.NumberFormat('en-u-nu-'+C.nu, {minimumIntegerDigits:2, useGrouping:false}).format(n); } catch(e){ return pad(n); } }
+function feed(title, text){
+  const f = $('#cFeed'); if (f.dataset.started !== '1'){ f.innerHTML = ''; f.dataset.started = '1'; }
+  const d = document.createElement('div'); d.innerHTML = `<b>${title}</b>${text}`; f.prepend(d);
+  while (f.children.length > 30) f.lastChild.remove();
+}
+function banner(big, sub, small, ms){
+  const b = $('#cBanner'); b.innerHTML = `<b>${big}</b>${sub?`<span>${sub}</span>`:''}${small?`<small>${small}</small>`:''}`; b.hidden = false;
+  clearTimeout(b._t); b._t = setTimeout(() => b.hidden = true, ms);
+}
+function setRate(r, ms){ const tok = ++C.token; C.rate = r; if (ms) later(() => { if (C.token === tok) C.rate = 1; }, ms); }
+function paint(h, dark){
+  const bg = dark ? `hsl(${h} 45% 11%)` : `hsl(${h} 70% 90%)`, ink = dark ? `hsl(${h} 30% 94%)` : `hsl(${h} 60% 12%)`;
+  stage.style.backgroundColor = bg; stage.style.color = ink;
+  stage.style.setProperty('--accent', `hsl(${(h+160)%360} 85% ${dark?60:42}%)`);
+}
+function sayFact(){
+  const L = LANGS[C.lang], i = C.factI++ % L.facts.length;
+  $('#cFact2').innerHTML = `${L.facts[i]}<small>${C.lang.toUpperCase()} · Source: ${FACT_SRC[i]}</small>`;
+}
+function setLang(k){ C.lang = k; $('#cTitle').textContent = LANGS[k].title; sayFact(); }
+
+const EVENTS = {
+  color(){ const h = Math.floor(R(0,360)), dark = Math.random() < .5; paint(h, dark); feed('COLOR', `Reality repainted in hue ${h}°.`); },
+  lang(){ const k = pick(Object.keys(LANGS).filter(x => x !== C.lang)); setLang(k); feed('LANGUAGE', `Everything now speaks ${new Intl.DisplayNames(['en'],{type:'language'}).of(k)}.`); },
+  digits(){ C.nu = pick(DIGITS.filter(x => x !== C.nu)); feed('DIGITS', `Numbers switched to the “${C.nu}” script.`); },
+  font(){ $('#cTime').style.fontFamily = pick(FONTS); feed('FONT', 'The clock changed its handwriting.'); },
+  sound(){ C.wave = pick(WAVES); C.pitch = Math.round(R(300, 2400)); feed('SOUND', `Ticks now sound like a ${C.wave} wave at ${C.pitch} Hz.`); },
+  fast(){ const r = +R(2.5, 6).toFixed(1); setRate(r, 3000); feed('SPEED', `Time is in a hurry: ×${r}.`); },
+  slow(){ const r = +R(.1, .4).toFixed(2); setRate(r, 3500); feed('SLOW', `Time is dragging its feet: ×${r}.`); },
+  jitter(){ C.jitterUntil = performance.now() + 1500; feed('GLITCH', 'The digits forgot what they were.'); sweep(3000, 200, .4, 'square', .3); },
+  tz(){ const z = pick(ZONES.slice(1))[0]; C.tz = z; feed('TELEPORT', `The clock teleported to ${z.replace('_',' ')}.`); },
+  flip(){ if (!$('#cMove').checked) return EVENTS.color(); const t = pick(['rotate(180deg)','scaleX(-1)','rotate(-4deg) scale(.95)','skewX(-8deg)']); stage.style.transform = t; later(() => stage.style.transform = '', 3000); feed('GRAVITY', 'Up and down had a disagreement.'); },
+  shake(){ if (!$('#cMove').checked) return EVENTS.digits(); stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake'); feed('QUAKE', 'The clock felt a tremor.'); },
+  menacing(){ for (let i=0;i<7;i++){ const m = document.createElement('div'); m.className='menace'; m.textContent = 'ゴ'; m.style.left = R(5,85)+'%'; m.style.top = R(5,80)+'%'; m.style.animationDelay = (i*.15)+'s'; stage.appendChild(m); setTimeout(() => m.remove(), 3600); } feed('ゴゴゴゴ', 'Something menacing approaches.'); },
+  theworld(){ timeStop('ZA WARUDO!', 'The World', 'Dio Brando'); },
+  starplat(){ timeStop('STAR PLATINUM: THE WORLD', 'Star Platinum', 'Jotaro Kujo'); },
+  bites(){ banner('BITES THE DUST', 'Time rewinds', 'Killer Queen · Yoshikage Kira', 2600); setRate(-R(6,15), 2600); stage.style.filter = 'sepia(.8) hue-rotate(-30deg)'; later(() => stage.style.filter = '', 2600); sweep(1800, 120, .25, 'square', .35); later(() => sweep(1600, 100, .25, 'square', .35), 300); later(() => sweep(1400, 90, .25, 'square', .35), 600); feed('REWIND', 'Killer Queen: Bites the Dust. Time runs backwards.'); },
+  kingcrimson(){ const hrs = Math.floor(R(1,7)); banner('KING CRIMSON', 'The time in between has been erased', 'Diavolo', 2200); stage.style.filter = 'invert(1) saturate(3) hue-rotate(300deg)'; later(() => { stage.style.filter = ''; C.vt += hrs*3600000; }, 500); sweep(200, 60, .8, 'sawtooth', .5); feed('SKIP', `King Crimson erased ${hrs} hour${hrs>1?'s':''}. Nobody noticed.`); },
+  heaven(){ banner('MADE IN HEAVEN', 'Time accelerates', 'Enrico Pucci', 2500); setRate(R(200, 900), 4500); sweep(100, 3000, 4, 'sine', .35); feed('ACCELERATE', 'Made in Heaven. The Sun races across the sky.'); }
+};
+function timeStop(big, stand, user){
+  C.stopUntil = performance.now() + 4500;
+  banner(big, '時よ止まれ! (Time, stop!)', `${stand} · ${user}`, 2400);
+  stage.classList.remove('zawarudo'); void stage.offsetWidth; stage.classList.add('zawarudo');
+  stage.style.filter = 'invert(1) hue-rotate(180deg) grayscale(.6)';
+  sweep(900, 50, 1.2, 'sawtooth', .6);
+  later(() => { stage.style.filter = 'grayscale(1) contrast(1.1)'; }, 1100);
+  later(() => { banner('時は動き出す', 'Time resumes', '', 1600); stage.style.filter = ''; stage.classList.remove('zawarudo'); sweep(50, 900, .8, 'sawtooth', .5); }, 4500);
+  feed('TIME STOP', `${stand} (${user}) stopped time.`);
+}
+const RANDOM_POOL = ['color','color','lang','lang','digits','font','sound','fast','slow','jitter','tz','flip','shake','menacing','theworld','starplat','bites','kingcrimson','heaven'];
+
+function chaosFrame(){
+  const now = performance.now();
+  const dt = C.last ? Math.min(100, now - C.last) : 0; C.last = now;
+  if (C.on){
+    if (now >= C.stopUntil) C.vt += dt * C.rate;
+    if (now >= C.next){ EVENTS[pick(RANDOM_POOL)](); C.next = now + R(1800, 6000) / +$('#cInt').value; }
+    if (now >= C.factAt){ sayFact(); C.factAt = now + 4000; }
+  } else C.vt += dt;
+  const d = new Date(C.vt);
+  const p = {}; new Intl.DateTimeFormat('en-US', {timeZone:C.tz, hour:'numeric', minute:'numeric', second:'numeric', hourCycle:'h23'}).formatToParts(d).forEach(x => p[x.type] = x.value);
+  let h = +p.hour % 24, m = +p.minute, s = +p.second;
+  if (now < C.jitterUntil){ h = Math.floor(R(0,99)); m = Math.floor(R(0,99)); s = Math.floor(R(0,99)); }
+  $('#cTime').textContent = `${cnum(h)}:${cnum(m)}:${cnum(s)}`;
+  const frac = (C.vt % 1000) / 1000;
+  $('#caH').setAttribute('transform', `rotate(${(h%12)*30 + m*.5} 100 100)`);
+  $('#caM').setAttribute('transform', `rotate(${m*6 + s*.1} 100 100)`);
+  $('#caS').setAttribute('transform', `rotate(${(s + (C.on ? frac : 0))*6} 100 100)`);
+  const loc = LANGS[C.lang].loc + '-u-nu-' + C.nu;
+  let ds; try { ds = d.toLocaleDateString(loc, {weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:C.tz}); } catch(e){ ds = d.toDateString(); }
+  $('#cDate').textContent = ds + (C.tz ? ' · ' + C.tz.split('/').pop().replace('_',' ') : '');
+  const stopped = now < C.stopUntil;
+  $('#cRate').textContent = `${LANGS[C.lang].speed} ×${stopped ? '0' : (Math.abs(C.rate) >= 100 ? Math.round(C.rate) : C.rate.toFixed(1))}` + (stopped ? ' · 時が止まった' : C.rate < 0 ? ' · ⏪' : '');
+  if (C.on && s !== C.lastSec && !stopped){ C.lastSec = s; if ($('#cSnd').checked) note(C.pitch * R(.7, 1.4), 0, .05, C.wave, .25); }
+}
+function chaosReset(){
+  C.timers.forEach(clearTimeout); C.timers = []; C.token++;
+  Object.assign(C, {vt:Date.now(), rate:1, stopUntil:0, nu:'latn', tz:undefined, jitterUntil:0, wave:'triangle', pitch:1600});
+  setLang('en');
+  stage.style.backgroundColor = stage.style.color = stage.style.filter = stage.style.transform = '';
+  stage.style.removeProperty('--accent'); stage.classList.remove('zawarudo','shake');
+  $('#cTime').style.fontFamily = ''; $('#cBanner').hidden = true;
+  $$('.menace').forEach(m => m.remove());
+}
+function chaosLeave(){ if (C.on){ C.on = false; $('#cGo').textContent = 'Start chaos'; } chaosReset(); stage.classList.remove('chaos-live'); }
+$('#cGo').onclick = () => {
+  ctx(); C.on = !C.on;
+  $('#cGo').textContent = C.on ? 'Stop chaos' : 'Start chaos';
+  stage.classList.add('chaos-live');
+  if (C.on){ C.next = performance.now() + 800; C.factAt = 0; feed('START', 'Chaos unleashed.'); } else feed('PAUSE', 'Chaos paused. Time keeps its current mess.');
+};
+$('#cReset').onclick = () => { chaosReset(); feed('RESET', 'Reality restored. Time is honest again.'); };
+$$('[data-ev]').forEach(b => b.onclick = () => { ctx(); stage.classList.add('chaos-live'); EVENTS[b.dataset.ev](); });
+if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) $('#cMove').checked = false;
+
+/* ---------- keyboard ---------- */
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,select,textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (view==='chaos' && k===' '){ e.preventDefault(); if (!e.repeat) $('#cGo').click(); return; }
+  if (view==='f1' && k===' '){ e.preventDefault(); if (!e.repeat) lightsHit(); return; }
+  if (e.target.matches('button, .preset') && (e.key===' '||e.key==='Enter')) return;
+  if (view==='timer'){
+    if (k===' '){ e.preventDefault(); if (alarmTimer) stopAlarm(); else $('#tStart').click(); }
+    if (k==='r') resetTimer();
+  } else if (view==='stopwatch'){
+    if (k===' '){ e.preventDefault(); $('#swStart').click(); }
+    if (k==='l') $('#swLap').click();
+    if (k==='r') $('#swReset').click();
+  }
+  if (k==='escape') stopAlarm();
+});
+
+/* ---------- loops ---------- */
+function frame(){
+  if (view==='clock') drawClock();
+  else if (view==='timer') drawTimer();
+  else if (view==='stopwatch') drawSW();
+  else if (view==='chaos') chaosFrame();
+  requestAnimationFrame(frame);
+}
+setInterval(checkTimer, 200);
+
+applyAccent(); applyTheme(); applyClockStyle(); drawMarks(); renderPresets(); renderLaps(); drawSW(); showView(view);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
